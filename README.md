@@ -1,1 +1,1 @@
-# TrabalhoPraticoSI-TP3-G2
+# TrabalhoPraticoSDT-TP3-G2
