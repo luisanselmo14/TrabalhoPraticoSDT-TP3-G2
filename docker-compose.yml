@@ -1,0 +1,27 @@
+services:
+  ipfs:
+    image: ipfs/go-ipfs:latest
+    container_name: ipfs
+    ports:
+      - "5001:5001"
+      - "4001:4001"
+      - "8080:8080"
+    volumes:
+      - ipfs_data:/data/ipfs
+
+  leader:
+    build: .
+    image: leader-api:local
+    container_name: leader-api
+    depends_on:
+      - ipfs
+    environment:
+      # usa DNS do serviço ipfs no compose
+      - IPFS_MULTIADDR=/dns4/ipfs/tcp/5001
+    ports:
+      - "8081:8081"
+    tty: true
+    stdin_open: true
+
+volumes:
+  ipfs_data:
