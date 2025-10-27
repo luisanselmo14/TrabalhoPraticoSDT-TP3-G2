@@ -17,8 +17,6 @@ WORKDIR /app
 COPY --from=builder /app/target/leader-api-1.0-SNAPSHOT.jar /app/target/
 COPY --from=builder /app/target/leader-api-1.0-SNAPSHOT-cluster-runner.jar /app/target/
 COPY run.sh /app/run.sh
-RUN apt-get update && apt-get install -y dos2unix \
-    && dos2unix /app/run.sh
 RUN chmod +x /app/run.sh
 
 EXPOSE 8081
