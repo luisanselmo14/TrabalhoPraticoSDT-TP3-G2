@@ -4,7 +4,9 @@ services:
     container_name: ipfs
     ports:
       - "5001:5001"
-      - "4001:4001"
+      # host port 4001 is reserved on some Windows systems (excluded port ranges).
+      # Remap to an available host port outside the excluded ranges.
+      - "4220:4001"
       - "8080:8080"
     volumes:
       - ipfs_data:/data/ipfs
