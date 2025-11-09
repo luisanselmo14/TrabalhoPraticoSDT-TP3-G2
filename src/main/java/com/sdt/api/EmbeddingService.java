@@ -33,6 +33,8 @@ public class EmbeddingService {
     
     public EmbeddingService() throws Exception {
         System.out.println("Initializing EmbeddingService...");
+        System.out.println("Engines disponíveis: " + ai.djl.engine.Engine.getAllEngines());
+
         this.tika = new Tika();
         
         try {
@@ -169,103 +171,95 @@ public class EmbeddingService {
      */
     private static class SentenceTransformer implements Translator<String, float[]> {
         private HuggingFaceTokenizer tokenizer;
-        
+        private static final int MAX_LENGTH = 128;
+        private static final int EMBEDDING_DIM = 384;
+
         @Override
         public void prepare(TranslatorContext ctx) throws IOException {
             try {
-                // O modelo já vem com o tokenizer
                 Path modelPath = ctx.getModel().getModelPath();
                 Path tokenizerPath = modelPath.resolve("tokenizer.json");
-                
+
                 if (Files.exists(tokenizerPath)) {
                     tokenizer = HuggingFaceTokenizer.newInstance(tokenizerPath);
-                    System.out.println("Loaded tokenizer from model path");
+                    System.out.println("✅ Loaded tokenizer from model path");
                 } else {
-                    // Fallback: criar tokenizer padrão
-                    System.out.println("Using fallback tokenizer: bert-base-uncased");
+                    System.out.println("⚠️ Tokenizer not found in model path, using fallback: bert-base-uncased");
                     tokenizer = HuggingFaceTokenizer.newInstance("bert-base-uncased");
                 }
             } catch (Exception e) {
-                System.err.println("Error loading tokenizer: " + e.getMessage());
+                System.err.println("❌ Error loading tokenizer: " + e.getMessage());
                 tokenizer = HuggingFaceTokenizer.newInstance("bert-base-uncased");
             }
         }
-        
+
         @Override
         public NDList processInput(TranslatorContext ctx, String input) {
             NDManager manager = ctx.getNDManager();
-            
-            // Tokenizar (sem parâmetro de max_length no encode)
-            Encoding encoding = tokenizer.encode(input, true, false);
-            
+
+            // Tokenizar com truncamento e padding automáticos
+            Encoding encoding = tokenizer.encode(new String[]{input});
             long[] inputIds = encoding.getIds();
             long[] attentionMask = encoding.getAttentionMask();
-            
-            // Truncar ou fazer padding para MAX_LENGTH
-            if (inputIds.length > MAX_LENGTH) {
-                inputIds = Arrays.copyOf(inputIds, MAX_LENGTH);
-                attentionMask = Arrays.copyOf(attentionMask, MAX_LENGTH);
-                inputIds[MAX_LENGTH - 1] = 102; // [SEP]
-                attentionMask[MAX_LENGTH - 1] = 1;
-            } else if (inputIds.length < MAX_LENGTH) {
+
+            // Padding manual se necessário
+            if (inputIds.length < MAX_LENGTH) {
                 long[] paddedIds = new long[MAX_LENGTH];
                 long[] paddedMask = new long[MAX_LENGTH];
                 System.arraycopy(inputIds, 0, paddedIds, 0, inputIds.length);
                 System.arraycopy(attentionMask, 0, paddedMask, 0, attentionMask.length);
                 inputIds = paddedIds;
                 attentionMask = paddedMask;
+            } else if (inputIds.length > MAX_LENGTH) {
+                inputIds = Arrays.copyOf(inputIds, MAX_LENGTH);
+                attentionMask = Arrays.copyOf(attentionMask, MAX_LENGTH);
             }
-            
-            // Criar array 2D: [1, MAX_LENGTH] usando matriz 2D diretamente
-            long[][] inputIds2D = new long[1][MAX_LENGTH];
-            long[][] attentionMask2D = new long[1][MAX_LENGTH];
-            System.arraycopy(inputIds, 0, inputIds2D[0], 0, MAX_LENGTH);
-            System.arraycopy(attentionMask, 0, attentionMask2D[0], 0, MAX_LENGTH);
-            
-            NDArray inputIdArray = manager.create(inputIds2D);
-            NDArray attentionMaskArray = manager.create(attentionMask2D);
-            
-            // Debug: verificar shape
-            System.out.println("Input shape: " + inputIdArray.getShape());
-            
-            return new NDList(inputIdArray, attentionMaskArray);
+
+            // ⚙️ Garante 2D shape correto (1, 128)
+            NDArray inputIdArray = manager.create(inputIds).reshape(new long[]{inputIds.length});
+            inputIdArray.expandDims(0); // modifica in-place
+            inputIdArray.setName("input_ids");
+
+            NDArray attentionMaskArray = manager.create(attentionMask).reshape(new long[]{attentionMask.length});
+            attentionMaskArray.expandDims(0);
+            attentionMaskArray.setName("attention_mask");
+
+
+            NDList inputs = new NDList(inputIdArray, attentionMaskArray);
+            System.out.println("🧠 Input shape: " + inputIdArray.getShape());
+            return inputs;
         }
-        
+
+
         @Override
-        public float[] processOutput(TranslatorContext ctx, NDList list) {
+        public float[] processOutput(TranslatorContext ctx, NDList outputs) {
             try {
-                // O modelo retorna embeddings já processados
-                NDArray embeddings = list.get(0);
-                
-                // Se for [batch, seq_len, hidden], fazer mean pooling
+                NDArray embeddings = outputs.get(0); // [1, seq_len, hidden_dim]
+                // 🔄 Não dá para aceder ctx.getInput(), portanto não usamos máscara real.
+                // Usamos média simples sobre seq_len (sem padding weighting)
                 if (embeddings.getShape().dimension() == 3) {
                     embeddings = embeddings.mean(new int[]{1});
                 }
-                
-                // Squeeze para remover dimensões extras
-                embeddings = embeddings.squeeze();
-                
-                // Normalização L2
-                NDArray norm = embeddings.norm(new int[]{0}, true);
+
+                // L2 normalization
+                NDArray norm = embeddings.norm(new int[]{1}, true);
                 NDArray normalized = embeddings.div(norm.add(1e-12));
-                
                 float[] result = normalized.toFloatArray();
-                
-                // Se não tiver 384 dimensões, preencher ou truncar
+
                 if (result.length != EMBEDDING_DIM) {
-                    System.out.println("Warning: embedding dimension mismatch. Got " + result.length + ", expected " + EMBEDDING_DIM);
+                    System.out.println("⚠️ Dimension mismatch: got " + result.length + ", expected " + EMBEDDING_DIM);
                     float[] fixed = new float[EMBEDDING_DIM];
                     System.arraycopy(result, 0, fixed, 0, Math.min(result.length, EMBEDDING_DIM));
                     return fixed;
                 }
-                
+
                 return result;
             } catch (Exception e) {
-                System.err.println("Error in processOutput: " + e.getMessage());
+                System.err.println("❌ Error in processOutput: " + e.getMessage());
                 e.printStackTrace();
-                // Retornar vetor zero em caso de erro
                 return new float[EMBEDDING_DIM];
             }
         }
     }
+
 }

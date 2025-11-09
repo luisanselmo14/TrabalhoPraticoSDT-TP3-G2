@@ -99,11 +99,11 @@
         <scope>runtime</scope>
     </dependency>
 
-    <!-- PyTorch native library para Windows -->
+    <!-- PyTorch native library para Linux -->
     <dependency>
         <groupId>ai.djl.pytorch</groupId>
         <artifactId>pytorch-native-cpu</artifactId>
-        <classifier>win-x86_64</classifier>
+        <classifier>linux-x86_64</classifier>
         <scope>runtime</scope>
     </dependency>
 
