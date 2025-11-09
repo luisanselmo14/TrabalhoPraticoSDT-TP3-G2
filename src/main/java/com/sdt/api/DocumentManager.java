@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.sdt.peers.LeaderCoordinator;
 import io.ipfs.multibase.Multibase;
 
 import java.io.BufferedReader;
@@ -32,6 +33,7 @@ public class DocumentManager {
     private final AtomicInteger versionCounter = new AtomicInteger(0);
     private final ObjectMapper mapper = new ObjectMapper();
     private final EmbeddingService embeddingService;
+    private final LeaderCoordinator coordinator;
 
     private final String PUBSUB_TOPIC = "sdt_doc_updates";
     private final String ipfsApiBase = System.getProperty("ipfs.api.base",
@@ -48,22 +50,23 @@ public class DocumentManager {
         // Inicializar serviço de embeddings
         this.embeddingService = new EmbeddingService();
         
+        // Inicializar coordenador (número de peers pode vir de configuração)
+        int totalPeers = Integer.parseInt(System.getProperty("cluster.peers", "3"));
+        this.coordinator = new LeaderCoordinator(totalPeers);
+        
         startPubSubSubscriber();
     }
 
     public synchronized int addDocumentAndPropagate(File storedFile, String cid) throws Exception {
-        // Criar nova versão do vetor (sem substituir a anterior)
-        List<String> base = new ArrayList<>(versions.get(versions.size() - 1));
-        base.add(cid);
-        versions.add(Collections.unmodifiableList(base));
-        int newVersion = versionCounter.incrementAndGet();
-
         // Gerar embeddings semânticos REAIS usando all-MiniLM-L6-v2
         System.out.println("Generating semantic embeddings for " + storedFile.getName() + "...");
         float[] embedding = embeddingService.generateEmbedding(storedFile);
         System.out.println("Embeddings generated: " + embedding.length + " dimensions");
 
-        // Salvar metadados
+        // Calcular próxima versão
+        int newVersion = versionCounter.get() + 1;
+
+        // Salvar metadados localmente
         Path cidDir = storageRoot.resolve(cid);
         Files.createDirectories(cidDir);
         Path namePath = cidDir.resolve(".name");
@@ -79,57 +82,26 @@ public class DocumentManager {
         embNode.set("embedding", mapper.valueToTree(embedding));
         Files.writeString(embPath, mapper.writeValueAsString(embNode), StandardCharsets.UTF_8);
 
-        // Propagar para peers
-        publishToPubSub(newVersion, cid, base, embedding);
+        // Fase 1 e 2 do 2PC: Coordenar atualização com peers
+        System.out.println("DocumentManager: Starting 2PC for v" + newVersion + " cid=" + cid);
+        boolean consensusAchieved = coordinator.coordinateUpdate(newVersion, cid, embedding);
+
+        if (!consensusAchieved) {
+            System.err.println("DocumentManager: Failed to achieve consensus for v" + newVersion);
+            throw new RuntimeException("Failed to achieve consensus with peers");
+        }
+
+        // Consensus alcançado! Atualizar versão local
+        List<String> base = new ArrayList<>(versions.get(versions.size() - 1));
+        base.add(cid);
+        versions.add(Collections.unmodifiableList(base));
+        versionCounter.set(newVersion);
+
+        System.out.println("DocumentManager: Updated list" + versions);
+
+        System.out.println("DocumentManager: Committed v" + newVersion + " cid=" + cid);
 
         return newVersion;
-    }
-
-    private void publishToPubSub(int version, String cid, List<String> vector, float[] embedding) {
-        try {
-            ObjectNode root = mapper.createObjectNode();
-            root.put("type", "doc_update");
-            root.put("version", version);
-            root.put("cid", cid);
-            root.set("vector", mapper.valueToTree(vector));
-            root.set("embedding", mapper.valueToTree(embedding));
-
-            String payloadJson = mapper.writeValueAsString(root);
-            
-            String encodedTopic = Multibase.encode(Multibase.Base.Base64Url, PUBSUB_TOPIC.getBytes(StandardCharsets.UTF_8));
-            String urlStr = ipfsApiBase + "/api/v0/pubsub/pub?arg=" + URLEncoder.encode(encodedTopic, StandardCharsets.UTF_8);
-
-            URL url = new URL(urlStr);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setDoOutput(true);
-            
-            String boundary = "----WebKitFormBoundary" + System.currentTimeMillis();
-            conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
-            
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(("--" + boundary + "\r\n").getBytes(StandardCharsets.UTF_8));
-                os.write(("Content-Disposition: form-data; name=\"data\"; filename=\"message.json\"\r\n").getBytes(StandardCharsets.UTF_8));
-                os.write(("Content-Type: application/json\r\n\r\n").getBytes(StandardCharsets.UTF_8));
-                os.write(payloadJson.getBytes(StandardCharsets.UTF_8));
-                os.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
-                os.flush();
-            }
-
-            int responseCode = conn.getResponseCode();
-            if (responseCode >= 400) {
-                InputStream errorStream = conn.getErrorStream();
-                if (errorStream != null) {
-                    String err = new String(errorStream.readAllBytes(), StandardCharsets.UTF_8);
-                    System.err.println("DocumentManager PubSub publish failed: " + err);
-                }
-            } else {
-                System.out.println("DocumentManager published update v" + version + " cid=" + cid);
-            }
-        } catch (Exception e) {
-            System.err.println("DocumentManager publishToPubSub error: " + e.getMessage());
-            e.printStackTrace();
-        }
     }
 
     private void startPubSubSubscriber() {
@@ -172,8 +144,14 @@ public class DocumentManager {
                                 String msgJson = new String(decoded, StandardCharsets.UTF_8);
                                 JsonNode msg = mapper.readTree(msgJson);
                                 
-                                if (msg.has("type") && "doc_update".equals(msg.get("type").asText())) {
-                                    applyRemoteUpdate(msg);
+                                // Ignorar mensagens do próprio 2PC (são tratadas pelo LeaderCoordinator)
+                                if (msg.has("type")) {
+                                    String type = msg.get("type").asText();
+                                    if ("doc_update".equals(type)) {
+                                        applyRemoteUpdate(msg);
+                                    }
+                                    // Mensagens "doc_update_request", "doc_update_prepare_response" 
+                                    // e "doc_update_commit" são tratadas por LeaderCoordinator e PeerNode
                                 }
                             }
                         } catch (Exception exInner) {
@@ -207,8 +185,17 @@ public class DocumentManager {
         return new ArrayList<>(versions);
     }
     
+    public synchronized int getCurrentVersion() {
+        return versionCounter.get();
+    }
+    
+    public IPFSClient getIpfsClient() {
+        return ipfsClient;
+    }
+    
     public void shutdown() {
         subscriberExecutor.shutdown();
+        coordinator.shutdown();
         embeddingService.close();
     }
 }

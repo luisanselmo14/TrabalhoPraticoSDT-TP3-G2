@@ -1,41 +1,51 @@
 package com.sdt.api;
 
-
-import io.ipfs.api.IPFS;
-import io.ipfs.api.MerkleNode;
-import io.ipfs.api.NamedStreamable;
 import java.io.File;
-import java.util.List;
-
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.file.Files;
 
 public class IPFSClient {
-    private final IPFS ipfs;
+    private final String ipfsApiBase;
 
-
-    // default constructor reads env var IPFS_MULTIADDR or falls back to /ip4/127.0.0.1/tcp/5001
-    public IPFSClient() {
-       String multi = System.getenv("IPFS_MULTIADDR");
-       if (multi == null || multi.isBlank()) {
-           multi = "/ip4/127.0.0.1/tcp/5001";
-       }
-       this.ipfs = new IPFS(multi);
+    public IPFSClient(String ipfsApiBase) {
+        this.ipfsApiBase = ipfsApiBase;
     }
 
-    public IPFSClient(String multiAddress) {
-       this.ipfs = new IPFS(multiAddress);
+    public String uploadFile(File file) throws Exception {
+        URL url = new URL(ipfsApiBase + "/api/v0/add");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setDoOutput(true);
+        
+        String boundary = "----WebKitFormBoundary" + System.currentTimeMillis();
+        conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+        
+        try (var os = conn.getOutputStream()) {
+            os.write(("--" + boundary + "\r\n").getBytes());
+            os.write(("Content-Disposition: form-data; name=\"file\"; filename=\"" + file.getName() + "\"\r\n").getBytes());
+            os.write("Content-Type: application/octet-stream\r\n\r\n".getBytes());
+            Files.copy(file.toPath(), os);
+            os.write(("\r\n--" + boundary + "--\r\n").getBytes());
+        }
+        
+        int responseCode = conn.getResponseCode();
+        if (responseCode >= 400) {
+            try (InputStream errorStream = conn.getErrorStream()) {
+                String error = new String(errorStream.readAllBytes());
+                throw new RuntimeException("IPFS upload failed: " + error);
+            }
+        }
+        
+        try (InputStream is = conn.getInputStream()) {
+            String response = new String(is.readAllBytes());
+            // Parse JSON response to extract CID
+            int hashIndex = response.indexOf("\"Hash\":\"");
+            if (hashIndex == -1) throw new RuntimeException("No CID in response");
+            int start = hashIndex + 8;
+            int end = response.indexOf("\"", start);
+            return response.substring(start, end);
+        }
     }
-
-
-    public String addFile(File file) throws Exception {
-        NamedStreamable.FileWrapper wrapper = new NamedStreamable.FileWrapper(file);
-        List<MerkleNode> result = ipfs.add(wrapper);
-        return result.get(0).hash.toString();
-    }
-    
-    public byte[] getFileBytes(String cid) throws Exception {
-        // usa Multihash para recuperar o conteúdo
-        io.ipfs.multihash.Multihash mh = io.ipfs.multihash.Multihash.fromBase58(cid);
-        return ipfs.cat(mh);
-    }
-
 }
