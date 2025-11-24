@@ -21,6 +21,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class PeerNode implements Runnable {
     private final String name;
@@ -30,16 +34,34 @@ public class PeerNode implements Runnable {
     private final String ipfsApiBase = System.getProperty("ipfs.api.base",
             System.getenv().getOrDefault("IPFS_API_BASE", "http://ipfs:5001"));
     private final ExecutorService subscriberExecutor = Executors.newSingleThreadExecutor();
+    private final ScheduledExecutorService failureDetectionExecutor = Executors.newScheduledThreadPool(1);
     
     // Estruturas temporárias para armazenar versões não confirmadas
     private final Map<Integer, List<String>> pendingVersions = new HashMap<>();
     private final Map<Integer, float[]> pendingEmbeddings = new HashMap<>();
+    private final Map<Integer, String> pendingCids = new HashMap<>(); // version -> cid
     private int confirmedVersion = 0;
+    
+    // Índice FAISS para busca por similaridade
+    private final FAISSIndex faissIndex = new FAISSIndex();
+    
+    // Heartbeat monitoring
+    private final AtomicLong lastHeartbeatTimestamp = new AtomicLong(System.currentTimeMillis());
+    private final AtomicLong lastHeartbeatSequence = new AtomicLong(0);
+    private final AtomicBoolean leaderFailed = new AtomicBoolean(false);
+    private final long heartbeatTimeoutSeconds;
+    private final long heartbeatIntervalSeconds;
 
     public PeerNode(String name) {
         this.name = name;
         versions.add(new ArrayList<>());
+        // Configurar timeout de detecção de falha (padrão: 15 segundos = 3 períodos de heartbeat)
+        this.heartbeatTimeoutSeconds = Long.parseLong(
+            System.getProperty("heartbeat.timeout.seconds", "15"));
+        this.heartbeatIntervalSeconds = Long.parseLong(
+            System.getProperty("heartbeat.interval.seconds", "5"));
         startPubSubSubscriber();
+        startFailureDetection();
     }
 
     @Override
@@ -90,6 +112,9 @@ public class PeerNode implements Runnable {
                                 String messageType = node.has("type") ? node.get("type").asText() : "";
                                 
                                 switch (messageType) {
+                                    case "heartbeat":
+                                        handleHeartbeat(node);
+                                        break;
                                     case "doc_update_request":
                                         handleUpdateRequest(node);
                                         break;
@@ -138,6 +163,7 @@ public class PeerNode implements Runnable {
                 // Armazenar temporariamente
                 pendingVersions.put(requestedVersion, newVector);
                 pendingEmbeddings.put(requestedVersion, embedding);
+                pendingCids.put(requestedVersion, cid);
                 
                 // Calcular hash do vetor
                 String vectorHash = calculateVectorHash(newVector);
@@ -168,6 +194,7 @@ public class PeerNode implements Runnable {
                 // Substituir versão atual pela nova versão confirmada
                 List<String> newVector = pendingVersions.remove(version);
                 float[] embedding = pendingEmbeddings.remove(version);
+                String cid = pendingCids.remove(version);
                 
                 if (version <= versions.size() - 1) {
                     versions.set(version, newVector);
@@ -182,7 +209,18 @@ public class PeerNode implements Runnable {
                 
                 confirmedVersion = version;
                 
-                // TODO: Indexar embeddings no FAISS aqui
+                // Indexar embedding no FAISS
+                if (cid != null && embedding != null) {
+                    try {
+                        faissIndex.add(cid, embedding, version);
+                        System.out.println(name + " indexed embedding in FAISS for cid=" + cid + 
+                                         " (index size: " + faissIndex.size() + ")");
+                    } catch (Exception e) {
+                        System.err.println(name + " failed to index embedding in FAISS: " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                }
+                
                 System.out.println(name + " committed v" + version + " vectorSize=" + newVector.size());
             }
         } catch (Exception ex) {
@@ -349,6 +387,120 @@ public class PeerNode implements Runnable {
     public List<String> getCurrentVector() {
         synchronized (this) {
             return new ArrayList<>(versions.get(confirmedVersion));
+        }
+    }
+    
+    private void handleHeartbeat(JsonNode node) {
+        try {
+            long sequence = node.has("sequence") ? node.get("sequence").asLong() : 0;
+            // Timestamp do heartbeat pode ser usado para sincronização futura
+            // long timestamp = node.has("timestamp") ? node.get("timestamp").asLong() : System.currentTimeMillis();
+            
+            lastHeartbeatTimestamp.set(System.currentTimeMillis());
+            lastHeartbeatSequence.set(sequence);
+            
+            // Se o líder estava marcado como falhado, mas recebemos um heartbeat, resetar
+            if (leaderFailed.get()) {
+                System.out.println(name + " received heartbeat from leader (sequence=" + sequence + 
+                                 "), leader is alive again!");
+                leaderFailed.set(false);
+            } else {
+                System.out.println(name + " received heartbeat #" + sequence + " from leader");
+            }
+        } catch (Exception ex) {
+            System.err.println(name + " handleHeartbeat error: " + ex.getMessage());
+        }
+    }
+    
+    private void startFailureDetection() {
+        System.out.println(name + ": Starting failure detection (timeout: " + 
+                          heartbeatTimeoutSeconds + " seconds)");
+        
+        failureDetectionExecutor.scheduleAtFixedRate(() -> {
+            try {
+                checkLeaderFailure();
+            } catch (Exception e) {
+                System.err.println(name + ": Failure detection error: " + e.getMessage());
+            }
+        }, heartbeatTimeoutSeconds, 1, TimeUnit.SECONDS); // Verificar a cada 1 segundo
+    }
+    
+    private void checkLeaderFailure() {
+        long currentTime = System.currentTimeMillis();
+        long lastHeartbeat = lastHeartbeatTimestamp.get();
+        long timeSinceLastHeartbeat = (currentTime - lastHeartbeat) / 1000; // em segundos
+        
+        if (timeSinceLastHeartbeat >= heartbeatTimeoutSeconds) {
+            if (!leaderFailed.get()) {
+                leaderFailed.set(true);
+                System.err.println(name + " *** LEADER FAILURE DETECTED ***");
+                System.err.println(name + " No heartbeat received for " + timeSinceLastHeartbeat + 
+                                 " seconds (timeout: " + heartbeatTimeoutSeconds + " seconds)");
+                System.err.println(name + " Last heartbeat sequence: " + lastHeartbeatSequence.get());
+                System.err.println(name + " Last heartbeat timestamp: " + lastHeartbeat);
+                
+                // TODO: Implementar recuperação de ficheiros pinned por outro peer
+                // Por enquanto, apenas registamos a detecção
+                onLeaderFailureDetected();
+            }
+        } else {
+            // Se recebemos heartbeat recentemente e estava marcado como falhado, resetar
+            if (leaderFailed.get() && timeSinceLastHeartbeat < heartbeatTimeoutSeconds) {
+                System.out.println(name + " Leader is alive again (heartbeat received " + 
+                                 timeSinceLastHeartbeat + " seconds ago)");
+                leaderFailed.set(false);
+            }
+        }
+    }
+    
+    private void onLeaderFailureDetected() {
+        // TODO: Implementar recuperação automática de ficheiros pinned
+        // Por enquanto, apenas logamos a detecção
+        System.out.println(name + " Leader failure detected. Recovery mechanism to be implemented.");
+        System.out.println(name + " Current confirmed version: " + confirmedVersion);
+        System.out.println(name + " Current vector size: " + 
+                          (confirmedVersion < versions.size() ? versions.get(confirmedVersion).size() : 0));
+    }
+    
+    public boolean isLeaderFailed() {
+        return leaderFailed.get();
+    }
+    
+    public long getLastHeartbeatSequence() {
+        return lastHeartbeatSequence.get();
+    }
+    
+    public long getTimeSinceLastHeartbeat() {
+        return (System.currentTimeMillis() - lastHeartbeatTimestamp.get()) / 1000;
+    }
+    
+    /**
+     * Busca documentos similares usando FAISS
+     * @param queryEmbedding Embedding de consulta
+     * @param k Número de resultados
+     * @return Lista de CIDs mais similares
+     */
+    public List<String> searchSimilar(float[] queryEmbedding, int k) {
+        return faissIndex.search(queryEmbedding, k);
+    }
+    
+    /**
+     * Retorna o tamanho do índice FAISS
+     */
+    public int getFAISSSize() {
+        return faissIndex.size();
+    }
+    
+    public void shutdown() {
+        subscriberExecutor.shutdownNow();
+        failureDetectionExecutor.shutdownNow();
+        try {
+            if (!failureDetectionExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
+                failureDetectionExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            failureDetectionExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
         }
     }
 }

@@ -16,8 +16,11 @@ until curl -s "${IPFS_API_BASE}/api/v0/version" > /dev/null 2>&1; do
 done
 echo "IPFS is ready at ${IPFS_API_BASE}!"
 
-# pass IPFS base to JVM
+# pass IPFS base and heartbeat config to JVM
 JAVA_OPTS="-Dipfs.api.base=${IPFS_API_BASE}"
+JAVA_OPTS="${JAVA_OPTS} -Dheartbeat.interval.seconds=${HEARTBEAT_INTERVAL_SECONDS:-5}"
+JAVA_OPTS="${JAVA_OPTS} -Dheartbeat.timeout.seconds=${HEARTBEAT_TIMEOUT_SECONDS:-15}"
+JAVA_OPTS="${JAVA_OPTS} -Dcluster.peers=${CLUSTER_PEERS:-3}"
 
 # start Leader
 LEADER_JAR=$(ls target/leader-api-1.0-SNAPSHOT.jar | head -n 1 || true)

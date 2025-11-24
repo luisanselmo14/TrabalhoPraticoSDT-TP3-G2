@@ -15,6 +15,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class LeaderCoordinator {
     private final ObjectMapper mapper = new ObjectMapper();
@@ -22,17 +23,38 @@ public class LeaderCoordinator {
     private final String ipfsApiBase = System.getProperty("ipfs.api.base",
             System.getenv().getOrDefault("IPFS_API_BASE", "http://ipfs:5001"));
     private final ExecutorService subscriberExecutor = Executors.newSingleThreadExecutor();
+    private final ScheduledExecutorService heartbeatExecutor = Executors.newScheduledThreadPool(1);
     
     // Mudança: Map de version -> List de hashes (permite duplicados)
     private final Map<Integer, List<String>> prepareResponses = new ConcurrentHashMap<>();
     private final Map<Integer, CountDownLatch> versionLatches = new ConcurrentHashMap<>();
-    private final int totalPeers;
-    private final int majorityThreshold;
+    
+    // Descoberta dinâmica de peers
+    private final Map<String, Long> activePeers = new ConcurrentHashMap<>(); // peer name -> last seen timestamp
+    private final ScheduledExecutorService peerDiscoveryExecutor = Executors.newScheduledThreadPool(1);
+    private final long peerTimeoutSeconds = 30; // Considerar peer inativo após 30 segundos sem resposta
+    private volatile int dynamicPeerCount;
+    private volatile int majorityThreshold;
+    
+    // Heartbeat configuration
+    private final long heartbeatIntervalSeconds;
+    private final AtomicLong heartbeatSequence = new AtomicLong(0);
 
-    public LeaderCoordinator(int totalPeers) {
-        this.totalPeers = totalPeers;
-        this.majorityThreshold = (totalPeers / 2) + 1;
+    public LeaderCoordinator(int initialPeerCount) {
+        // Valor inicial pode vir de configuração, mas será atualizado dinamicamente
+        this.dynamicPeerCount = Math.max(initialPeerCount, 1); // Mínimo 1
+        this.majorityThreshold = (dynamicPeerCount / 2) + 1;
+        
+        // Configurar intervalo de heartbeat (padrão: 5 segundos)
+        this.heartbeatIntervalSeconds = Long.parseLong(
+            System.getProperty("heartbeat.interval.seconds", "5"));
+        
         startPubSubSubscriber();
+        startHeartbeatService();
+        startPeerDiscovery();
+        
+        System.out.println("LeaderCoordinator: Initial peer count: " + initialPeerCount + 
+                          ", majority threshold: " + majorityThreshold);
     }
 
     private void startPubSubSubscriber() {
@@ -99,6 +121,9 @@ public class LeaderCoordinator {
             
             System.out.println("Leader received prepare response from " + peer + " for v" + version + " hash=" + hash);
             
+            // Atualizar descoberta dinâmica de peers
+            updateActivePeer(peer);
+            
             // Adicionar à lista (permite duplicados do mesmo hash)
             prepareResponses.computeIfAbsent(version, k -> new ArrayList<>()).add(hash);
             
@@ -109,6 +134,66 @@ public class LeaderCoordinator {
         } catch (Exception ex) {
             System.err.println("Leader handlePrepareResponse error: " + ex.getMessage());
         }
+    }
+    
+    /**
+     * Atualiza o timestamp de um peer ativo
+     */
+    private void updateActivePeer(String peerName) {
+        long currentTime = System.currentTimeMillis();
+        activePeers.put(peerName, currentTime);
+        
+        // Atualizar contagem dinâmica de peers
+        int newPeerCount = activePeers.size();
+        if (newPeerCount != dynamicPeerCount) {
+            dynamicPeerCount = newPeerCount;
+            majorityThreshold = (dynamicPeerCount / 2) + 1;
+            System.out.println("LeaderCoordinator: Updated peer count to " + dynamicPeerCount + 
+                             ", new majority threshold: " + majorityThreshold);
+        }
+    }
+    
+    /**
+     * Remove peers inativos e atualiza contagem
+     */
+    private void cleanupInactivePeers() {
+        long currentTime = System.currentTimeMillis();
+        long timeoutMillis = peerTimeoutSeconds * 1000;
+        
+        activePeers.entrySet().removeIf(entry -> {
+            long timeSinceLastSeen = currentTime - entry.getValue();
+            if (timeSinceLastSeen > timeoutMillis) {
+                System.out.println("LeaderCoordinator: Removing inactive peer: " + entry.getKey() + 
+                                 " (last seen " + (timeSinceLastSeen / 1000) + " seconds ago)");
+                return true;
+            }
+            return false;
+        });
+        
+        // Atualizar contagem após limpeza
+        int newPeerCount = activePeers.size();
+        if (newPeerCount != dynamicPeerCount) {
+            dynamicPeerCount = Math.max(newPeerCount, 1); // Mínimo 1
+            majorityThreshold = (dynamicPeerCount / 2) + 1;
+            System.out.println("LeaderCoordinator: After cleanup, peer count: " + dynamicPeerCount + 
+                             ", majority threshold: " + majorityThreshold);
+        }
+    }
+    
+    /**
+     * Inicia o serviço de descoberta de peers
+     */
+    private void startPeerDiscovery() {
+        System.out.println("LeaderCoordinator: Starting peer discovery service");
+        
+        // Limpar peers inativos a cada 10 segundos
+        peerDiscoveryExecutor.scheduleAtFixedRate(() -> {
+            try {
+                cleanupInactivePeers();
+            } catch (Exception e) {
+                System.err.println("LeaderCoordinator: Peer discovery error: " + e.getMessage());
+            }
+        }, 10, 10, TimeUnit.SECONDS);
     }
 
     public boolean coordinateUpdate(int version, String cid, float[] embedding) {
@@ -238,7 +323,62 @@ public class LeaderCoordinator {
         versionLatches.remove(version);
     }
 
+    private void startHeartbeatService() {
+        System.out.println("LeaderCoordinator: Starting heartbeat service (interval: " + 
+                          heartbeatIntervalSeconds + " seconds)");
+        
+        heartbeatExecutor.scheduleAtFixedRate(() -> {
+            try {
+                publishHeartbeat();
+            } catch (Exception e) {
+                System.err.println("LeaderCoordinator: Heartbeat error: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }, heartbeatIntervalSeconds, heartbeatIntervalSeconds, TimeUnit.SECONDS);
+    }
+    
+    private void publishHeartbeat() throws Exception {
+        long sequence = heartbeatSequence.incrementAndGet();
+        ObjectNode root = mapper.createObjectNode();
+        root.put("type", "heartbeat");
+        root.put("sequence", sequence);
+        root.put("timestamp", System.currentTimeMillis());
+        
+        String payloadJson = mapper.writeValueAsString(root);
+        publishMessage(payloadJson);
+        
+        System.out.println("LeaderCoordinator: Published heartbeat #" + sequence);
+    }
+
     public void shutdown() {
         subscriberExecutor.shutdownNow();
+        heartbeatExecutor.shutdownNow();
+        peerDiscoveryExecutor.shutdownNow();
+        try {
+            if (!heartbeatExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
+                heartbeatExecutor.shutdownNow();
+            }
+            if (!peerDiscoveryExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
+                peerDiscoveryExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            heartbeatExecutor.shutdownNow();
+            peerDiscoveryExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+    
+    /**
+     * Retorna o número atual de peers ativos
+     */
+    public int getActivePeerCount() {
+        return dynamicPeerCount;
+    }
+    
+    /**
+     * Retorna o threshold de maioria atual
+     */
+    public int getMajorityThreshold() {
+        return majorityThreshold;
     }
 }

@@ -29,6 +29,9 @@ services:
     environment:
       - IPFS_MULTIADDR=/dns4/ipfs/tcp/5001
       - IPFS_API_BASE=http://ipfs:5001  # Nova variável
+      - HEARTBEAT_INTERVAL_SECONDS=5
+      - HEARTBEAT_TIMEOUT_SECONDS=15
+      - CLUSTER_PEERS=3
     ports:
       - "8081:8081"
     tty: true
