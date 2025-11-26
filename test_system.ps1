@@ -64,7 +64,7 @@ function Invoke-TestRequest {
 
 # Funcao para verificar logs do Docker
 function Get-DockerLogs {
-    param([string]$Pattern, [int]$Lines = 50)
+    param([string]$Pattern, [int]$Lines = 200)
     
     $logs = docker-compose logs leader --tail=$Lines 2>&1
     if ($Pattern) {
@@ -91,7 +91,7 @@ if ($leaderRunning -and $ipfsRunning) {
 Write-Host ""
 Write-Host "[TESTE 2] Verificando heartbeats..." -ForegroundColor Yellow
 Start-Sleep -Seconds 6
-$heartbeatLogs = Get-DockerLogs -Pattern "Published heartbeat|received heartbeat" -Lines 30
+$heartbeatLogs = Get-DockerLogs -Pattern "Published heartbeat|received heartbeat" -Lines 200
 if ($heartbeatLogs) {
     $heartbeatCount = ($heartbeatLogs | Measure-Object).Count
     Write-Host "  [OK] Heartbeats detectados ($heartbeatCount mensagens)" -ForegroundColor Green
@@ -104,7 +104,7 @@ if ($heartbeatLogs) {
 # Teste 3: Verificar descoberta de peers
 Write-Host ""
 Write-Host "[TESTE 3] Verificando descoberta dinamica de peers..." -ForegroundColor Yellow
-$peerDiscoveryLogs = Get-DockerLogs -Pattern "peer discovery|Updated peer count|Starting peer discovery|Initial peer count" -Lines 100
+$peerDiscoveryLogs = Get-DockerLogs -Pattern "peer discovery|Updated peer count|Starting peer discovery|Initial peer count" -Lines 200
 if ($peerDiscoveryLogs) {
     Write-Host "  [OK] Servico de descoberta de peers ativo" -ForegroundColor Green
     $peerDiscoveryLogs | Select-Object -Last 3 | ForEach-Object { Write-Host "      $_" -ForegroundColor Gray }
@@ -132,7 +132,7 @@ Write-Host "  Reiniciando o lider..." -ForegroundColor Gray
 docker start leader-api
 Start-Sleep -Seconds 10
 
-$recoveryLogs = Get-DockerLogs -Pattern "leader is alive again|received heartbeat" -Lines 30
+$recoveryLogs = Get-DockerLogs -Pattern "leader is alive again|received heartbeat" -Lines 200
 if ($recoveryLogs) {
     Write-Host "  [OK] Recuperacao detectada (lider voltou)" -ForegroundColor Green
 }
@@ -186,7 +186,7 @@ Start-Sleep -Seconds 5
 
 # Verificar indexação FAISS
 Write-Host "  Verificando indexacao FAISS..." -ForegroundColor Gray
-$faissLogs = Get-DockerLogs -Pattern "indexed embedding in FAISS|FAISS" -Lines 100
+$faissLogs = Get-DockerLogs -Pattern "indexed embedding in FAISS|FAISS" -Lines 200
 
 if ($faissLogs) {
     Write-Host "  [OK] Indexacao FAISS detectada!" -ForegroundColor Green
@@ -196,7 +196,7 @@ if ($faissLogs) {
 }
 
 # Verificar commit
-$commitLogs = Get-DockerLogs -Pattern "committed|received commit" -Lines 100
+$commitLogs = Get-DockerLogs -Pattern "committed|received commit" -Lines 200
 
 if ($commitLogs) {
     Write-Host "  [OK] Commit detectado!" -ForegroundColor Green
@@ -208,7 +208,7 @@ if ($commitLogs) {
 # Teste 6: Verificar consenso 2PC
 Write-Host ""
 Write-Host "[TESTE 6] Verificando consenso 2PC..." -ForegroundColor Yellow
-$consensusLogs = Get-DockerLogs -Pattern "achieved consensus|prepare response|majority" -Lines 100
+$consensusLogs = Get-DockerLogs -Pattern "achieved consensus|prepare response|majority" -Lines 200
 if ($consensusLogs) {
     Write-Host "  [OK] Mensagens de consenso detectadas" -ForegroundColor Green
     $consensusLogs | Select-Object -Last 5 | ForEach-Object { Write-Host "      $_" -ForegroundColor Gray }
@@ -220,7 +220,7 @@ if ($consensusLogs) {
 Write-Host ""
 Write-Host "[TESTE 7] Verificando descoberta dinamica de peers apos interacao..." -ForegroundColor Yellow
 Start-Sleep -Seconds 5
-$peerCountLogs = Get-DockerLogs -Pattern "Updated peer count|peer count:" -Lines 100
+$peerCountLogs = Get-DockerLogs -Pattern "Updated peer count|peer count:" -Lines 200
 if ($peerCountLogs) {
     Write-Host "  [OK] Atualizacoes de contagem de peers detectadas" -ForegroundColor Green
     $peerCountLogs | Select-Object -Last 3 | ForEach-Object { Write-Host "      $_" -ForegroundColor Gray }
