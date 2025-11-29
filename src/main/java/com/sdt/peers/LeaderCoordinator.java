@@ -36,6 +36,11 @@ public class LeaderCoordinator {
     private volatile int dynamicPeerCount;
     private volatile int majorityThreshold;
     
+    // Pinning management
+    private final Map<String, List<String>> cidPinningAssignments = new ConcurrentHashMap<>(); // cid -> lista de peers que fazem pinning
+    private final Map<String, Set<String>> peerPinnedCids = new ConcurrentHashMap<>(); // peer -> set de CIDs pinned
+    private final int minPinningRedundancy = 2; // Mínimo de 2 peers por ficheiro
+    
     // Heartbeat configuration
     private final long heartbeatIntervalSeconds;
     private final AtomicLong heartbeatSequence = new AtomicLong(0);
@@ -160,15 +165,24 @@ public class LeaderCoordinator {
         long currentTime = System.currentTimeMillis();
         long timeoutMillis = peerTimeoutSeconds * 1000;
         
+        List<String> failedPeers = new ArrayList<>();
+        
         activePeers.entrySet().removeIf(entry -> {
             long timeSinceLastSeen = currentTime - entry.getValue();
             if (timeSinceLastSeen > timeoutMillis) {
-                System.out.println("LeaderCoordinator: Removing inactive peer: " + entry.getKey() + 
+                String peerName = entry.getKey();
+                System.out.println("LeaderCoordinator: Removing inactive peer: " + peerName + 
                                  " (last seen " + (timeSinceLastSeen / 1000) + " seconds ago)");
+                failedPeers.add(peerName);
                 return true;
             }
             return false;
         });
+        
+        // Recuperar pinning para peers que falharam
+        for (String failedPeer : failedPeers) {
+            recoverPinningForFailedPeer(failedPeer);
+        }
         
         // Atualizar contagem após limpeza
         int newPeerCount = activePeers.size();
@@ -252,6 +266,9 @@ public class LeaderCoordinator {
             // Fase 2: Enviar commit
             publishCommit(version);
             
+            // Fase 3: Determinar pinning distribuído e garantir redundância
+            assignPinning(cid);
+            
             cleanup(version);
             return true;
             
@@ -322,6 +339,148 @@ public class LeaderCoordinator {
         prepareResponses.remove(version);
         versionLatches.remove(version);
     }
+    
+    /**
+     * Determina quais peers devem fazer pinning de um CID (pinning distribuído)
+     * Garante redundância mínima de 2 peers
+     */
+    private void assignPinning(String cid) {
+        try {
+            // Obter lista de peers ativos
+            List<String> availablePeers = new ArrayList<>(activePeers.keySet());
+            
+            if (availablePeers.size() < minPinningRedundancy) {
+                System.err.println("Leader: Not enough peers for pinning redundancy (need " + 
+                                 minPinningRedundancy + ", have " + availablePeers.size() + ")");
+                return;
+            }
+            
+            // Selecionar peers para pinning (algoritmo distribuído: hash do CID mod número de peers)
+            // Isso garante que o mesmo CID sempre vai para os mesmos peers
+            List<String> assignedPeers = new ArrayList<>();
+            
+            // Usar hash do CID para determinar peers de forma determinística
+            int cidHash = cid.hashCode();
+            int peerCount = availablePeers.size();
+            
+            // Selecionar pelo menos minPinningRedundancy peers
+            for (int i = 0; i < minPinningRedundancy && i < peerCount; i++) {
+                int peerIndex = Math.abs((cidHash + i) % peerCount);
+                String selectedPeer = availablePeers.get(peerIndex);
+                if (!assignedPeers.contains(selectedPeer)) {
+                    assignedPeers.add(selectedPeer);
+                }
+            }
+            
+            // Se não temos redundância suficiente, adicionar mais peers
+            while (assignedPeers.size() < minPinningRedundancy && assignedPeers.size() < peerCount) {
+                for (String peer : availablePeers) {
+                    if (!assignedPeers.contains(peer)) {
+                        assignedPeers.add(peer);
+                        break;
+                    }
+                }
+            }
+            
+            // Armazenar atribuição
+            cidPinningAssignments.put(cid, new ArrayList<>(assignedPeers));
+            for (String peer : assignedPeers) {
+                peerPinnedCids.computeIfAbsent(peer, k -> ConcurrentHashMap.newKeySet()).add(cid);
+            }
+            
+            // Enviar atribuição para os peers
+            publishPinningAssignment(cid, assignedPeers);
+            
+            System.out.println("Leader: Assigned pinning for CID " + cid + " to peers: " + assignedPeers);
+        } catch (Exception e) {
+            System.err.println("Leader assignPinning error: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Publica atribuição de pinning
+     */
+    private void publishPinningAssignment(String cid, List<String> assignedPeers) throws Exception {
+        ObjectNode root = mapper.createObjectNode();
+        root.put("type", "pinning_assignment");
+        root.put("cid", cid);
+        root.set("assignedPeers", mapper.valueToTree(assignedPeers));
+
+        String payloadJson = mapper.writeValueAsString(root);
+        publishMessage(payloadJson);
+    }
+    
+    /**
+     * Detecta falha de peer e recupera pinning
+     */
+    private void recoverPinningForFailedPeer(String failedPeer) {
+        try {
+            Set<String> cidsToRecover = peerPinnedCids.getOrDefault(failedPeer, ConcurrentHashMap.newKeySet());
+            
+            if (cidsToRecover.isEmpty()) {
+                return; // Peer não tinha nenhum CID pinned
+            }
+            
+            System.out.println("Leader: Recovering pinning for " + cidsToRecover.size() + 
+                             " CIDs from failed peer " + failedPeer);
+            
+            // Para cada CID, verificar se ainda tem redundância suficiente
+            List<String> cidsNeedingRecovery = new ArrayList<>();
+            
+            for (String cid : cidsToRecover) {
+                List<String> currentPinningPeers = cidPinningAssignments.getOrDefault(cid, new ArrayList<>());
+                currentPinningPeers.remove(failedPeer);
+                
+                if (currentPinningPeers.size() < minPinningRedundancy) {
+                    cidsNeedingRecovery.add(cid);
+                }
+                
+                cidPinningAssignments.put(cid, currentPinningPeers);
+            }
+            
+            // Remover peer da lista de peers ativos
+            peerPinnedCids.remove(failedPeer);
+            
+            // Para cada CID que precisa de recuperação, atribuir novos peers
+            for (String cid : cidsNeedingRecovery) {
+                List<String> currentPinningPeers = cidPinningAssignments.getOrDefault(cid, new ArrayList<>());
+                List<String> availablePeers = new ArrayList<>(activePeers.keySet());
+                availablePeers.removeAll(currentPinningPeers);
+                
+                int needed = minPinningRedundancy - currentPinningPeers.size();
+                for (int i = 0; i < needed && i < availablePeers.size(); i++) {
+                    String newPeer = availablePeers.get(i);
+                    currentPinningPeers.add(newPeer);
+                    peerPinnedCids.computeIfAbsent(newPeer, k -> ConcurrentHashMap.newKeySet()).add(cid);
+                }
+                
+                cidPinningAssignments.put(cid, currentPinningPeers);
+                
+                // Enviar pedido de recuperação
+                publishPinningRecoveryRequest(failedPeer, cid, currentPinningPeers);
+            }
+            
+            System.out.println("Leader: Recovered pinning for " + cidsNeedingRecovery.size() + " CIDs");
+        } catch (Exception e) {
+            System.err.println("Leader recoverPinningForFailedPeer error: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Publica pedido de recuperação de pinning
+     */
+    private void publishPinningRecoveryRequest(String failedPeer, String cid, List<String> newPinningPeers) throws Exception {
+        ObjectNode root = mapper.createObjectNode();
+        root.put("type", "pinning_recovery_request");
+        root.put("failedPeer", failedPeer);
+        root.set("cidsToRecover", mapper.valueToTree(List.of(cid)));
+        root.set("newPinningPeers", mapper.valueToTree(newPinningPeers));
+
+        String payloadJson = mapper.writeValueAsString(root);
+        publishMessage(payloadJson);
+    }
 
     private void startHeartbeatService() {
         System.out.println("LeaderCoordinator: Starting heartbeat service (interval: " + 
@@ -343,6 +502,7 @@ public class LeaderCoordinator {
         root.put("type", "heartbeat");
         root.put("sequence", sequence);
         root.put("timestamp", System.currentTimeMillis());
+        root.put("leader", "leader"); // Identificar o líder real (Spring Boot app)
         
         String payloadJson = mapper.writeValueAsString(root);
         publishMessage(payloadJson);
