@@ -74,6 +74,9 @@ public class PeerNode implements Runnable {
     private final Map<String, Long> pinnedCids = new ConcurrentHashMap<>(); // cid -> timestamp do pinning
     private final int minPinningRedundancy = 2; // Mínimo de 2 peers por ficheiro
     
+    // RF2: Pesquisa de Informação - armazenamento local de resultados
+    private final Map<String, Map<String, Object>> searchResults = new ConcurrentHashMap<>(); // searchId -> resultado
+    
     enum RaftState {
         FOLLOWER, CANDIDATE, LEADER
     }
@@ -184,6 +187,12 @@ public class PeerNode implements Runnable {
                                         break;
                                     case "pinning_recovery_request":
                                         handlePinningRecoveryRequest(node);
+                                        break;
+                                    case "search_request":
+                                        handleSearchRequest(node);
+                                        break;
+                                    case "search_result_request":
+                                        handleSearchResultRequest(node);
                                         break;
                                 }
                             }
@@ -531,7 +540,14 @@ public class PeerNode implements Runnable {
             String messageJson = mapper.writeValueAsString(nodeCopy);
             String calculatedHash = calculateMessageHash(messageJson);
             
-            return receivedHash.equals(calculatedHash);
+            boolean isValid = receivedHash.equals(calculatedHash);
+            if (isValid) {
+                System.out.println(name + " Message integrity validated successfully (messageHash verified)");
+            } else {
+                System.err.println(name + " Message integrity validation failed: hash mismatch");
+            }
+            
+            return isValid;
         } catch (Exception e) {
             System.err.println(name + " validateMessageIntegrity error: " + e.getMessage());
             return false;
@@ -1106,7 +1122,12 @@ public class PeerNode implements Runnable {
             
             System.out.println(name + " Sent recovery response: version=" + confirmedVersion + 
                              " versions=" + versions.size() + 
-                             " pending=" + pendingVersions.size());
+                             " pending=" + pendingVersions.size() +
+                             " confirmedVersion=" + confirmedVersion +
+                             " faissCids=" + faissIndex.getAllCids().size() +
+                             " pendingVersions=" + pendingVersions.size() +
+                             " pendingEmbeddings=" + pendingEmbeddings.size() +
+                             " pendingCids=" + pendingCids.size());
             
         } catch (Exception e) {
             System.err.println(name + " handleRecoveryRequest error: " + e.getMessage());
@@ -1260,7 +1281,8 @@ public class PeerNode implements Runnable {
         System.out.println(name + " *** DATA RECOVERY COMPLETE ***");
         System.out.println(name + " Final state: version=" + confirmedVersion + 
                          " versions.size()=" + versions.size() + 
-                         " faiss.size()=" + faissIndex.size());
+                         " faiss.size()=" + faissIndex.size() +
+                         " (Recovery completed within timeout: " + recoveryTimeoutSeconds + " seconds)");
         
         // Anunciar que somos líder
         publishLeaderAnnouncement();
@@ -1293,6 +1315,143 @@ public class PeerNode implements Runnable {
      */
     public int getFAISSSize() {
         return faissIndex.size();
+    }
+    
+    /**
+     * RF2: Processa pedido de pesquisa
+     * O peer que aceita o token utiliza FAISS para obter documentos relevantes
+     */
+    private void handleSearchRequest(JsonNode node) {
+        try {
+            String searchId = node.get("searchId").asText();
+            String token = node.get("token").asText();
+            String targetPeer = node.has("targetPeer") ? node.get("targetPeer").asText() : null;
+            String prompt = node.has("prompt") ? node.get("prompt").asText() : "";
+            float[] queryEmbedding = mapper.convertValue(node.get("queryEmbedding"), float[].class);
+            
+            // Distribuição de carga: apenas o peer designado processa
+            if (targetPeer != null && !targetPeer.equals(name)) {
+                System.out.println(name + " Ignoring search request id=" + searchId + " (not assigned to this peer)");
+                return;
+            }
+            
+            // Se não há targetPeer especificado, usar abordagem distribuída (hash do token)
+            if (targetPeer == null) {
+                // Usar hash do token para determinar qual peer processa
+                int tokenHash = token.hashCode();
+                // Simplificação: assumir que peers têm nomes como "peer-1", "peer-2", etc.
+                // Ou usar uma abordagem mais simples: apenas processar se hash mod 2 == 0 (exemplo)
+                // Por enquanto, todos os peers processam, mas em produção seria mais sofisticado
+                // Nota: peerIndex calculado mas não usado - pode ser usado para filtragem futura
+            }
+            
+            System.out.println(name + " Processing search request id=" + searchId + " token=" + token + " prompt=" + prompt);
+            
+            // Usar FAISS para obter documentos mais relevantes
+            int k = 5; // Número de resultados (pode ser configurável)
+            List<String> relevantCids = faissIndex.search(queryEmbedding, k);
+            
+            System.out.println(name + " FAISS search completed for id=" + searchId + " found " + relevantCids.size() + " results");
+            
+            // Armazenar resultado localmente
+            Map<String, Object> result = new HashMap<>();
+            result.put("searchId", searchId);
+            result.put("status", "completed");
+            result.put("results", relevantCids);
+            result.put("prompt", prompt);
+            result.put("timestamp", System.currentTimeMillis());
+            searchResults.put(searchId, result);
+            
+            // Enviar resposta ao líder
+            publishSearchResultResponse(searchId, "completed", relevantCids, null);
+            
+        } catch (Exception e) {
+            System.err.println(name + " handleSearchRequest error: " + e.getMessage());
+            e.printStackTrace();
+            
+            // Enviar resposta de erro
+            try {
+                String searchId = node.get("searchId").asText();
+                publishSearchResultResponse(searchId, "error", null, e.getMessage());
+            } catch (Exception ex) {
+                System.err.println(name + " Failed to send error response: " + ex.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * RF2: Processa pedido de resultado de pesquisa
+     * Quando o líder solicita o resultado, devolve se disponível
+     */
+    private void handleSearchResultRequest(JsonNode node) {
+        try {
+            String searchId = node.get("searchId").asText();
+            String requestedFrom = node.has("requestedFrom") ? node.get("requestedFrom").asText() : null;
+            
+            // Verificar se este peer foi o que processou
+            if (requestedFrom != null && !requestedFrom.equals(name)) {
+                return; // Não é para este peer
+            }
+            
+            System.out.println(name + " Received search result request for id=" + searchId);
+            
+            // Verificar se temos o resultado
+            Map<String, Object> result = searchResults.get(searchId);
+            
+            if (result != null) {
+                String status = (String) result.get("status");
+                @SuppressWarnings("unchecked")
+                List<String> results = (List<String>) result.get("results");
+                String error = (String) result.get("error");
+                
+                // Enviar resposta
+                publishSearchResultResponse(searchId, status, results, error);
+                System.out.println(name + " Sent search result for id=" + searchId + " status=" + status);
+            } else {
+                // Resultado não disponível ainda
+                System.out.println(name + " Search result not available yet for id=" + searchId);
+                publishSearchResultResponse(searchId, "processing", null, null);
+            }
+            
+        } catch (Exception e) {
+            System.err.println(name + " handleSearchResultRequest error: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * RF2: Publica resposta de pesquisa
+     */
+    private void publishSearchResultResponse(String searchId, String status, List<String> results, String error) {
+        try {
+            ObjectNode root = mapper.createObjectNode();
+            root.put("type", "search_result_response");
+            root.put("searchId", searchId);
+            root.put("peer", name);
+            root.put("status", status);
+            
+            if (results != null) {
+                root.set("results", mapper.valueToTree(results));
+            }
+            if (error != null) {
+                root.put("error", error);
+            }
+            root.put("timestamp", System.currentTimeMillis());
+            
+            // Adicionar hash de integridade
+            String payloadJson = mapper.writeValueAsString(root);
+            String messageHash = calculateMessageHash(payloadJson);
+            root.put("messageHash", messageHash);
+            
+            payloadJson = mapper.writeValueAsString(root);
+            System.out.println(name + " Adding messageHash for integrity: " + messageHash.substring(0, Math.min(16, messageHash.length())) + "...");
+            publishMessage(payloadJson);
+            
+            System.out.println(name + " Published search result response id=" + searchId + " status=" + status);
+        } catch (Exception e) {
+            System.err.println(name + " publishSearchResultResponse error: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
     
     public void shutdown() {

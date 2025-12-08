@@ -11,7 +11,6 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
@@ -19,9 +18,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -39,6 +37,9 @@ public class DocumentManager {
     private final String ipfsApiBase = System.getProperty("ipfs.api.base",
             System.getenv().getOrDefault("IPFS_API_BASE", "http://ipfs:5001"));
     private final ExecutorService subscriberExecutor = Executors.newSingleThreadExecutor();
+    
+    // RF2: Armazenamento de resultados de pesquisa (id -> resultado)
+    private final Map<String, Map<String, Object>> searchResults = new ConcurrentHashMap<>();
 
     public DocumentManager(IPFSClient ipfsClient) throws Exception {
         this.ipfsClient = ipfsClient;
@@ -149,6 +150,8 @@ public class DocumentManager {
                                     String type = msg.get("type").asText();
                                     if ("doc_update".equals(type)) {
                                         applyRemoteUpdate(msg);
+                                    } else if ("search_result_response".equals(type)) {
+                                        handleSearchResultResponse(msg);
                                     }
                                     // Mensagens "doc_update_request", "doc_update_prepare_response" 
                                     // e "doc_update_commit" são tratadas por LeaderCoordinator e PeerNode
@@ -191,6 +194,134 @@ public class DocumentManager {
     
     public IPFSClient getIpfsClient() {
         return ipfsClient;
+    }
+    
+    /**
+     * RF2: Inicia uma pesquisa - gera id e token, envia para rede
+     */
+    public String initiateSearch(String prompt) {
+        // Gerar id único para a pesquisa
+        String searchId = UUID.randomUUID().toString();
+        
+        // Gerar embedding da prompt
+        System.out.println("Generating embedding for search prompt: " + prompt);
+        
+        // Criar arquivo temporário com a prompt para gerar embedding
+        Path tempPromptFile = null;
+        try {
+            tempPromptFile = Files.createTempFile("search-prompt-", ".txt");
+            Files.writeString(tempPromptFile, prompt, StandardCharsets.UTF_8);
+            
+            float[] queryEmbedding = embeddingService.generateEmbedding(tempPromptFile.toFile());
+            System.out.println("Query embedding generated: " + queryEmbedding.length + " dimensions");
+            
+            // Enviar para rede via LeaderCoordinator
+            try {
+                coordinator.distributeSearchRequest(searchId, prompt, queryEmbedding);
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to distribute search request", e);
+            }
+            
+            // Inicializar resultado como "processing"
+            Map<String, Object> result = new HashMap<>();
+            result.put("id", searchId);
+            result.put("status", "processing");
+            result.put("prompt", prompt);
+            result.put("timestamp", System.currentTimeMillis());
+            searchResults.put(searchId, result);
+            
+            System.out.println("Search request initiated with id: " + searchId);
+            return searchId;
+        } catch (Exception e) {
+            System.err.println("Failed to initiate search: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Failed to initiate search", e);
+        } finally {
+            if (tempPromptFile != null) {
+                try {
+                    Files.deleteIfExists(tempPromptFile);
+                } catch (Exception e) {
+                    System.err.println("Failed to delete temp file: " + e.getMessage());
+                }
+            }
+        }
+    }
+    
+    /**
+     * RF2: Obtém resultado de pesquisa
+     */
+    public Map<String, Object> getSearchResult(String searchId) {
+        Map<String, Object> result = searchResults.get(searchId);
+        
+        if (result == null) {
+            return null;
+        }
+        
+        // Se ainda está processando, solicitar ao peer
+        if ("processing".equals(result.get("status"))) {
+            System.out.println("Search result still processing, requesting from peer for id: " + searchId);
+            try {
+                coordinator.requestSearchResult(searchId);
+            } catch (Exception e) {
+                System.err.println("Failed to request search result: " + e.getMessage());
+            }
+            
+            // Retornar status de processamento
+            return Map.of(
+                "id", searchId,
+                "status", "processing",
+                "message", "Search is still being processed, please try again later"
+            );
+        }
+        
+        return result;
+    }
+    
+    /**
+     * RF2: Processa resposta de pesquisa recebida de um peer
+     */
+    private synchronized void handleSearchResultResponse(JsonNode msg) {
+        try {
+            String searchId = msg.get("searchId").asText();
+            String peer = msg.get("peer").asText();
+            String status = msg.get("status").asText();
+            
+            System.out.println("Received search result response for id: " + searchId + " from peer: " + peer);
+            
+            Map<String, Object> result = searchResults.get(searchId);
+            if (result == null) {
+                result = new HashMap<>();
+                searchResults.put(searchId, result);
+            }
+            
+            if ("completed".equals(status)) {
+                // Extrair resultados
+                JsonNode resultsNode = msg.get("results");
+                List<String> cids = new ArrayList<>();
+                if (resultsNode != null && resultsNode.isArray()) {
+                    for (JsonNode cidNode : resultsNode) {
+                        cids.add(cidNode.asText());
+                    }
+                }
+                
+                result.put("status", "completed");
+                result.put("results", cids);
+                result.put("peer", peer);
+                result.put("completedAt", System.currentTimeMillis());
+                
+                System.out.println("Search result completed for id: " + searchId + " with " + cids.size() + " results");
+            } else if ("error".equals(status)) {
+                String error = msg.has("error") ? msg.get("error").asText() : "Unknown error";
+                result.put("status", "error");
+                result.put("error", error);
+                result.put("peer", peer);
+                
+                System.err.println("Search result error for id: " + searchId + ": " + error);
+            }
+        } catch (Exception e) {
+            System.err.println("DocumentManager handleSearchResultResponse error: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
     
     public void shutdown() {

@@ -41,6 +41,10 @@ public class LeaderCoordinator {
     private final Map<String, Set<String>> peerPinnedCids = new ConcurrentHashMap<>(); // peer -> set de CIDs pinned
     private final int minPinningRedundancy = 2; // Mínimo de 2 peers por ficheiro
     
+    // RF2: Pesquisa de Informação - rastreamento de pesquisas
+    private final Map<String, String> searchIdToPeer = new ConcurrentHashMap<>(); // searchId -> peer que está processando
+    private final AtomicLong searchTokenCounter = new AtomicLong(0); // Contador para distribuição de carga
+    
     // Heartbeat configuration
     private final long heartbeatIntervalSeconds;
     private final AtomicLong heartbeatSequence = new AtomicLong(0);
@@ -540,5 +544,91 @@ public class LeaderCoordinator {
      */
     public int getMajorityThreshold() {
         return majorityThreshold;
+    }
+    
+    /**
+     * RF2: Distribui pedido de pesquisa para um peer (distribuição de carga)
+     */
+    public void distributeSearchRequest(String searchId, String prompt, float[] queryEmbedding) throws Exception {
+        List<String> availablePeers = new ArrayList<>(activePeers.keySet());
+        
+        // Se não há peers ativos ainda, usar lista de peers conhecidos baseada na configuração
+        if (availablePeers.isEmpty()) {
+            // Criar lista de peers conhecidos baseada no número total de peers
+            // Assumindo que os peers têm nomes como "peer-1", "peer-2", etc.
+            int totalPeers = Integer.parseInt(System.getProperty("cluster.peers", "3"));
+            for (int i = 1; i < totalPeers; i++) { // Excluir o líder (totalPeers inclui o líder)
+                String peerName = "peer-" + i;
+                availablePeers.add(peerName);
+                // Adicionar ao activePeers também para futuras pesquisas
+                updateActivePeer(peerName);
+            }
+            
+            if (availablePeers.isEmpty()) {
+                throw new RuntimeException("No peers available for search (check cluster.peers configuration)");
+            }
+            
+            System.out.println("LeaderCoordinator: Using configured peers for search: " + availablePeers);
+        }
+        
+        // Distribuição de carga: usar round-robin baseado em contador
+        int peerIndex = (int) (searchTokenCounter.getAndIncrement() % availablePeers.size());
+        String selectedPeer = availablePeers.get(peerIndex);
+        
+        // Gerar token único para a pesquisa
+        String token = UUID.randomUUID().toString();
+        
+        // Armazenar mapeamento searchId -> peer
+        searchIdToPeer.put(searchId, selectedPeer);
+        
+        System.out.println("LeaderCoordinator: Distributing search request id=" + searchId + 
+                         " to peer=" + selectedPeer + " with token=" + token);
+        
+        // Publicar mensagem de pesquisa
+        publishSearchRequest(searchId, token, prompt, queryEmbedding, selectedPeer);
+    }
+    
+    /**
+     * RF2: Publica pedido de pesquisa para um peer específico
+     */
+    private void publishSearchRequest(String searchId, String token, String prompt, 
+                                      float[] queryEmbedding, String targetPeer) throws Exception {
+        ObjectNode root = mapper.createObjectNode();
+        root.put("type", "search_request");
+        root.put("searchId", searchId);
+        root.put("token", token);
+        root.put("prompt", prompt);
+        root.put("targetPeer", targetPeer);
+        root.set("queryEmbedding", mapper.valueToTree(queryEmbedding));
+        root.put("timestamp", System.currentTimeMillis());
+
+        String payloadJson = mapper.writeValueAsString(root);
+        publishMessage(payloadJson);
+        
+        System.out.println("LeaderCoordinator: Published search request id=" + searchId + " to peer=" + targetPeer);
+    }
+    
+    /**
+     * RF2: Solicita resultado de pesquisa ao peer que está processando
+     */
+    public void requestSearchResult(String searchId) throws Exception {
+        String peer = searchIdToPeer.get(searchId);
+        
+        if (peer == null) {
+            System.err.println("LeaderCoordinator: No peer found for search id: " + searchId);
+            return;
+        }
+        
+        System.out.println("LeaderCoordinator: Requesting search result id=" + searchId + " from peer=" + peer);
+        
+        // Publicar pedido de resultado
+        ObjectNode root = mapper.createObjectNode();
+        root.put("type", "search_result_request");
+        root.put("searchId", searchId);
+        root.put("requestedFrom", peer);
+        root.put("timestamp", System.currentTimeMillis());
+
+        String payloadJson = mapper.writeValueAsString(root);
+        publishMessage(payloadJson);
     }
 }

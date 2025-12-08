@@ -1,0 +1,16 @@
+com\sdt\api\DocumentManager.class
+com\sdt\peers\FAISSIndex$SimilarityResult.class
+com\sdt\peers\FAISSIndex.class
+com\sdt\api\IPFSClient.class
+com\sdt\peers\ClusterRunner.class
+com\sdt\peers\PeerNode$RaftState.class
+com\sdt\peers\PeerNode.class
+com\sdt\peers\LeaderSender.class
+com\sdt\api\DocumentManager$1.class
+com\sdt\api\AppConfig.class
+com\sdt\api\LeaderApplication.class
+com\sdt\api\EmbeddingService$SentenceTransformer.class
+com\sdt\peers\LeaderCoordinator.class
+com\sdt\peers\PeerListener.class
+com\sdt\api\LeaderController.class
+com\sdt\api\EmbeddingService.class

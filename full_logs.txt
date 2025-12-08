@@ -1,0 +1,500 @@
+leader-api  | LeaderCoordinator: Published heartbeat #1
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #1 from leader leader
+leader-api  | peer-1 received heartbeat #1 from leader leader
+leader-api  | Using IPFS_API_BASE=http://ipfs:5001, START_PEERS=true
+leader-api  | Waiting for IPFS at http://ipfs:5001...
+leader-api  | IPFS is ready at http://ipfs:5001!
+leader-api  | ==> starting leader: java -Dipfs.api.base=http://ipfs:5001 -Dheartbeat.interval.seconds=5 -Dheartbeat.timeout.seconds=15 -Dcluster.peers=3 -jar target/leader-api-1.0-SNAPSHOT.jar
+leader-api  | leader pid=12
+leader-api  | ==> starting ClusterRunner: java -Dipfs.api.base=http://ipfs:5001 -Dheartbeat.interval.seconds=5 -Dheartbeat.timeout.seconds=15 -Dcluster.peers=3 -jar target/leader-api-1.0-SNAPSHOT-cluster-runner.jar
+leader-api  | peers pid=49
+leader-api  | ==> Tailing logs. Ctrl+C to stop.
+leader-api  | ==> /app/leader.log <==
+leader-api  | ( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+leader-api  |  \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+leader-api  |   '  |____| .__|_| |_|_| |_\__, | / / / /
+leader-api  |  =========|_|==============|___/=/_/_/_/
+leader-api  | 
+leader-api  |  :: Spring Boot ::                (v3.3.0)
+leader-api  | 
+leader-api  | 2025-12-07 14:26:41 INFO  [main] com.sdt.api.LeaderApplication - Starting LeaderApplication v1.0-SNAPSHOT using Java 17.0.17 with PID 12 (/app/target/leader-api-1.0-SNAPSHOT.jar started by root in /app)
+leader-api  | 2025-12-07 14:26:41 DEBUG [main] com.sdt.api.LeaderApplication - Running with Spring Boot v3.3.0, Spring v6.1.8
+leader-api  | 2025-12-07 14:26:41 INFO  [main] com.sdt.api.LeaderApplication - No active profile set, falling back to 1 default profile: "default"
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | 2025-12-07 14:26:43 INFO  [main] o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8081 (http)
+leader-api  | 2025-12-07 14:26:43 INFO  [main] o.a.catalina.core.StandardService - Starting service [Tomcat]
+leader-api  | 2025-12-07 14:26:43 INFO  [main] o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.24]
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1: Starting failure detection (timeout: 15 seconds)
+leader-api  | peer-2: Starting failure detection (timeout: 15 seconds)
+leader-api  | peer-1 peer run() retorna; a subscrição pubsub corre em background.
+leader-api  | peer-2 peer run() retorna; a subscrição pubsub corre em background.
+leader-api  | Peers started. Leader is the Spring Boot app; use /files/upload to add docs.
+leader-api  | Heartbeat interval: 5 seconds
+leader-api  | Failure detection timeout: 15 seconds
+leader-api  | peer-2 connecting to http://ipfs:5001/api/v0/pubsub/sub?arg=uc2R0X2RvY191cGRhdGVz
+leader-api  | peer-1 connecting to http://ipfs:5001/api/v0/pubsub/sub?arg=uc2R0X2RvY191cGRhdGVz
+leader-api  | peer-1 subscribed to sdt_doc_updates successfully!
+leader-api  | peer-2 subscribed to sdt_doc_updates successfully!
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | 2025-12-07 14:26:43 INFO  [main] o.a.c.c.C.[.[localhost].[/api] - Initializing Spring embedded WebApplicationContext
+leader-api  | 2025-12-07 14:26:43 INFO  [main] o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 1699 ms
+leader-api  | DocumentManager using IPFS API base: http://ipfs:5001
+leader-api  | Initializing EmbeddingService...
+leader-api  | Engines disponíveis: [PyTorch, Rust, OnnxRuntime]
+leader-api  | Attempting to load ONNX model...
+leader-api  | Loading:     100% |████████████████████████████████████████|
+leader-api  | 2025-12-07 14:26:44 INFO  [main] ai.djl.util.Platform - Found matching platform from: jar:nested:/app/target/leader-api-1.0-SNAPSHOT.jar/!BOOT-INF/lib/pytorch-native-cpu-2.2.2-linux-x86_64.jar!/native/lib/pytorch.properties
+leader-api  | 2025-12-07 14:26:45 INFO  [main] ai.djl.pytorch.engine.PtEngine - PyTorch graph executor optimizer is enabled, this may impact your inference latency and throughput. See: https://docs.djl.ai/docs/development/inference_performance_optimization.html#graph-executor-optimization
+leader-api  | 2025-12-07 14:26:45 INFO  [main] ai.djl.pytorch.engine.PtEngine - Number of inter-op threads is 12
+leader-api  | 2025-12-07 14:26:45 INFO  [main] ai.djl.pytorch.engine.PtEngine - Number of intra-op threads is 6
+leader-api  | EmbeddingService initialized successfully with ONNX!
+leader-api  | LeaderCoordinator: Starting heartbeat service (interval: 5 seconds)
+leader-api  | LeaderCoordinator: Starting peer discovery service
+leader-api  | LeaderCoordinator: Initial peer count: 3, majority threshold: 2
+leader-api  | DocumentManager connecting to http://ipfs:5001/api/v0/pubsub/sub?arg=uc2R0X2RvY191cGRhdGVz
+leader-api  | Leader connecting to http://ipfs:5001/api/v0/pubsub/sub?arg=uc2R0X2RvY191cGRhdGVz
+leader-api  | Leader subscribed to sdt_doc_updates successfully!
+leader-api  | DocumentManager subscribed to sdt_doc_updates successfully!
+leader-api  | 2025-12-07 14:26:45 INFO  [main] o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8081 (http) with context path '/api'
+leader-api  | 2025-12-07 14:26:45 INFO  [main] com.sdt.api.LeaderApplication - Started LeaderApplication in 4.755 seconds (process running for 5.347)
+leader-api  | LeaderCoordinator: Published heartbeat #1
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #1 from leader leader
+leader-api  | peer-2 received heartbeat #1 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | LeaderCoordinator: Published heartbeat #2
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #2 from leader leader
+leader-api  | peer-1 received heartbeat #2 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #3
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #3 from leader leader
+leader-api  | peer-2 received heartbeat #3 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | LeaderCoordinator: Published heartbeat #4
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #4 from leader leader
+leader-api  | peer-2 received heartbeat #4 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #5
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #5 from leader leader
+leader-api  | peer-2 received heartbeat #5 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | LeaderCoordinator: Published heartbeat #6
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #6 from leader leader
+leader-api  | peer-1 received heartbeat #6 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #7
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #7 from leader leader
+leader-api  | peer-1 received heartbeat #7 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | LeaderCoordinator: Published heartbeat #8
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #8 from leader leader
+leader-api  | peer-2 received heartbeat #8 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #9
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #9 from leader leader
+leader-api  | peer-2 received heartbeat #9 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | LeaderCoordinator: Published heartbeat #10
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #10 from leader leader
+leader-api  | peer-2 received heartbeat #10 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | 2025-12-07 14:27:35 INFO  [http-nio-8081-exec-1] o.a.c.c.C.[.[localhost].[/api] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+leader-api  | 2025-12-07 14:27:35 INFO  [http-nio-8081-exec-1] o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+leader-api  | 2025-12-07 14:27:35 INFO  [http-nio-8081-exec-1] o.s.web.servlet.DispatcherServlet - Completed initialization in 1 ms
+leader-api  | Received upload request for file: test_document.txt
+leader-api  | Uploaded to IPFS: QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw
+leader-api  | Generating semantic embeddings for upload-5713061250796489232test_document.txt...
+leader-api  | 2025-12-07 14:27:35 INFO  [http-nio-8081-exec-1] ai.djl.util.Platform - Found matching platform from: jar:nested:/app/target/leader-api-1.0-SNAPSHOT.jar/!BOOT-INF/lib/tokenizers-0.28.0.jar!/native/lib/tokenizers.properties
+leader-api  | ✅ Loaded tokenizer from model path
+leader-api  | 🧠 Input shape: (128)
+leader-api  | ⚠️ Dimension mismatch: got 49152, expected 384
+leader-api  | Generated embedding: 384 dimensions para upload-5713061250796489232test_document.txt
+leader-api  | Embeddings generated: 384 dimensions
+leader-api  | DocumentManager: Starting 2PC for v1 cid=QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw
+leader-api  | Leader coordinating update v1 cid=QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw
+leader-api  | Leader published update request v1
+leader-api  | Leader received prepare response from peer-1 for v1 hash=bkt327GHPSWEEFKeZ+qZGD/7rQ8c4mRczygzz7yql8A=
+leader-api  | Leader received 1 responses for v1
+leader-api  | Leader hash distribution: {bkt327GHPSWEEFKeZ+qZGD/7rQ8c4mRczygzz7yql8A==1}
+leader-api  | Leader received prepare response from peer-2 for v1 hash=bkt327GHPSWEEFKeZ+qZGD/7rQ8c4mRczygzz7yql8A=
+leader-api  | LeaderCoordinator: Updated peer count to 2, new majority threshold: 2
+leader-api  | Leader no consensus on hash for v1 (need 2 votes)
+leader-api  | DocumentManager: Failed to achieve consensus for v1
+leader-api  | Upload failed: Failed to achieve consensus with peers
+leader-api  | java.lang.RuntimeException: Failed to achieve consensus with peers
+leader-api  | 	at com.sdt.api.DocumentManager.addDocumentAndPropagate(DocumentManager.java:92)
+leader-api  | 	at com.sdt.api.LeaderController.uploadDocument(LeaderController.java:38)
+leader-api  | 	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+leader-api  | 	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+leader-api  | 	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+leader-api  | 	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+leader-api  | 	at org.springframework.web.method.support.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:255)
+leader-api  | 	at org.springframework.web.method.support.InvocableHandlerMethod.invokeForRequest(InvocableHandlerMethod.java:188)
+leader-api  | 	at org.springframework.web.servlet.mvc.method.annotation.ServletInvocableHandlerMethod.invokeAndHandle(ServletInvocableHandlerMethod.java:118)
+leader-api  | 	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.invokeHandlerMethod(RequestMappingHandlerAdapter.java:926)
+leader-api  | 	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.handleInternal(RequestMappingHandlerAdapter.java:831)
+leader-api  | 	at org.springframework.web.servlet.mvc.method.AbstractHandlerMethodAdapter.handle(AbstractHandlerMethodAdapter.java:87)
+leader-api  | 	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1089)
+leader-api  | 	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:979)
+leader-api  | 	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1014)
+leader-api  | 	at org.springframework.web.servlet.FrameworkServlet.doPost(FrameworkServlet.java:914)
+leader-api  | 	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:590)
+leader-api  | 	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:885)
+leader-api  | 	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:658)
+leader-api  | 	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:195)
+leader-api  | 	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140)
+leader-api  | 	at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:51)
+leader-api  | 	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164)
+leader-api  | 	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140)
+leader-api  | 	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100)
+leader-api  | 	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+leader-api  | 	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164)
+leader-api  | 	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140)
+leader-api  | 	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93)
+leader-api  | 	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+leader-api  | 	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164)
+leader-api  | 	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140)
+leader-api  | 	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201)
+leader-api  | 	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+leader-api  | 	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164)
+leader-api  | 	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140)
+leader-api  | 	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:167)
+leader-api  | 	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:90)
+leader-api  | 	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:482)
+leader-api  | 	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:115)
+leader-api  | 	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:93)
+leader-api  | 	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74)
+leader-api  | 	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:344)
+leader-api  | 	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:389)
+leader-api  | 	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63)
+leader-api  | 	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:896)
+leader-api  | 	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1741)
+leader-api  | 	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52)
+leader-api  | 	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1190)
+leader-api  | 	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659)
+leader-api  | 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:63)
+leader-api  | 	at java.base/java.lang.Thread.run(Thread.java:840)
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received update request for v1 cid=QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw
+leader-api  | peer-2 received update request for v1 cid=QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw
+leader-api  | peer-1 sent prepare response v1 hash=bkt327GHPSWEEFKeZ+qZGD/7rQ8c4mRczygzz7yql8A=
+leader-api  | peer-2 sent prepare response v1 hash=bkt327GHPSWEEFKeZ+qZGD/7rQ8c4mRczygzz7yql8A=
+leader-api  | peer-2 prepared v1 hash=bkt327GHPSWEEFKeZ+qZGD/7rQ8c4mRczygzz7yql8A=
+leader-api  | peer-1 prepared v1 hash=bkt327GHPSWEEFKeZ+qZGD/7rQ8c4mRczygzz7yql8A=
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | Received upload request for file: test_document.txt
+leader-api  | Uploaded to IPFS: QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw
+leader-api  | Generating semantic embeddings for upload-8250911826108460694test_document.txt...
+leader-api  | ✅ Loaded tokenizer from model path
+leader-api  | 🧠 Input shape: (128)
+leader-api  | ⚠️ Dimension mismatch: got 49152, expected 384
+leader-api  | Generated embedding: 384 dimensions para upload-8250911826108460694test_document.txt
+leader-api  | Embeddings generated: 384 dimensions
+leader-api  | DocumentManager: Starting 2PC for v1 cid=QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw
+leader-api  | Leader coordinating update v1 cid=QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw
+leader-api  | Leader published update request v1
+leader-api  | Leader received prepare response from peer-2 for v1 hash=bkt327GHPSWEEFKeZ+qZGD/7rQ8c4mRczygzz7yql8A=
+leader-api  | Leader received prepare response from peer-1 for v1 hash=bkt327GHPSWEEFKeZ+qZGD/7rQ8c4mRczygzz7yql8A=
+leader-api  | Leader received 2 responses for v1
+leader-api  | Leader hash distribution: {bkt327GHPSWEEFKeZ+qZGD/7rQ8c4mRczygzz7yql8A==2}
+leader-api  | Leader achieved consensus for v1 hash=bkt327GHPSWEEFKeZ+qZGD/7rQ8c4mRczygzz7yql8A= votes=2
+leader-api  | Leader published commit v1
+leader-api  | Leader: Assigned pinning for CID QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw to peers: [peer-2, peer-1]
+leader-api  | DocumentManager: Updated list[[], [QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw]]
+leader-api  | DocumentManager: Committed v1 cid=QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received update request for v1 cid=QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw
+leader-api  | peer-2 received update request for v1 cid=QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw
+leader-api  | peer-2 sent prepare response v1 hash=bkt327GHPSWEEFKeZ+qZGD/7rQ8c4mRczygzz7yql8A=
+leader-api  | peer-2 prepared v1 hash=bkt327GHPSWEEFKeZ+qZGD/7rQ8c4mRczygzz7yql8A=
+leader-api  | peer-1 sent prepare response v1 hash=bkt327GHPSWEEFKeZ+qZGD/7rQ8c4mRczygzz7yql8A=
+leader-api  | peer-1 prepared v1 hash=bkt327GHPSWEEFKeZ+qZGD/7rQ8c4mRczygzz7yql8A=
+leader-api  | peer-1 received commit for v1
+leader-api  | peer-2 received commit for v1
+leader-api  | peer-1 indexed embedding in FAISS for cid=QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw (index size: 1)
+leader-api  | peer-2 indexed embedding in FAISS for cid=QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw (index size: 1)
+leader-api  | peer-2 committed v1 vectorSize=1
+leader-api  | peer-1 committed v1 vectorSize=1
+leader-api  | peer-2 Assigned to pin CID: QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw
+leader-api  | peer-1 Assigned to pin CID: QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw
+leader-api  | peer-2 Successfully pinned CID: QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw
+leader-api  | peer-1 Successfully pinned CID: QmZA7dv1CxGsVaMw5Htuc2AWa98FSNNjeVRTKLMNwTfHbw
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #11
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #11 from leader leader
+leader-api  | peer-2 received heartbeat #11 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #12
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #12 from leader leader
+leader-api  | peer-1 received heartbeat #12 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #13
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #13 from leader leader
+leader-api  | peer-2 received heartbeat #13 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #14
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #14 from leader leader
+leader-api  | peer-2 received heartbeat #14 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | Received search request with prompt: documento teste
+leader-api  | Generating embedding for search prompt: documento teste
+leader-api  | ✅ Loaded tokenizer from model path
+leader-api  | 🧠 Input shape: (128)
+leader-api  | ⚠️ Dimension mismatch: got 49152, expected 384
+leader-api  | Generated embedding: 384 dimensions para search-prompt-11539691838420083466.txt
+leader-api  | Query embedding generated: 384 dimensions
+leader-api  | LeaderCoordinator: Distributing search request id=b89373b7-feda-4175-af56-97dd8a1733b8 to peer=peer-2 with token=03a9e2bd-22be-4312-a253-ca6bbec3a613
+leader-api  | LeaderCoordinator: Published search request id=b89373b7-feda-4175-af56-97dd8a1733b8 to peer=peer-2
+leader-api  | Search request initiated with id: b89373b7-feda-4175-af56-97dd8a1733b8
+leader-api  | Received search result response for id: b89373b7-feda-4175-af56-97dd8a1733b8 from peer: peer-2
+leader-api  | Search result completed for id: b89373b7-feda-4175-af56-97dd8a1733b8 with 1 results
+leader-api  | LeaderCoordinator: Published heartbeat #15
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 Ignoring search request id=b89373b7-feda-4175-af56-97dd8a1733b8 (not assigned to this peer)
+leader-api  | peer-2 Processing search request id=b89373b7-feda-4175-af56-97dd8a1733b8 token=03a9e2bd-22be-4312-a253-ca6bbec3a613 prompt=documento teste
+leader-api  | peer-2 FAISS search completed for id=b89373b7-feda-4175-af56-97dd8a1733b8 found 1 results
+leader-api  | peer-2 Published search result response id=b89373b7-feda-4175-af56-97dd8a1733b8 status=completed
+leader-api  | peer-1 received heartbeat #15 from leader leader
+leader-api  | peer-2 received heartbeat #15 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #16
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #16 from leader leader
+leader-api  | peer-1 received heartbeat #16 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #17
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #17 from leader leader
+leader-api  | peer-1 received heartbeat #17 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #18
+leader-api  | LeaderCoordinator: Removing inactive peer: peer-2 (last seen 36 seconds ago)
+leader-api  | LeaderCoordinator: Removing inactive peer: peer-1 (last seen 36 seconds ago)
+leader-api  | Leader: Recovering pinning for 1 CIDs from failed peer peer-2
+leader-api  | Leader: Recovered pinning for 1 CIDs
+leader-api  | Leader: Recovering pinning for 1 CIDs from failed peer peer-1
+leader-api  | Leader: Recovered pinning for 1 CIDs
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | Received search result request for id: b89373b7-feda-4175-af56-97dd8a1733b8
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #18 from leader leader
+leader-api  | peer-1 received heartbeat #18 from leader leader
+leader-api  | peer-1 Received pinning recovery request for peer peer-2 with 1 CIDs
+leader-api  | peer-2 Received pinning recovery request for peer peer-2 with 1 CIDs
+leader-api  | peer-2 Received pinning recovery request for peer peer-1 with 1 CIDs
+leader-api  | peer-1 Received pinning recovery request for peer peer-1 with 1 CIDs
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #19
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #19 from leader leader
+leader-api  | peer-2 received heartbeat #19 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | LeaderCoordinator: Published heartbeat #20
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #20 from leader leader
+leader-api  | peer-2 received heartbeat #20 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #21
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #21 from leader leader
+leader-api  | peer-2 received heartbeat #21 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | LeaderCoordinator: Published heartbeat #22
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #22 from leader leader
+leader-api  | peer-1 received heartbeat #22 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #23
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #23 from leader leader
+leader-api  | peer-2 received heartbeat #23 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | LeaderCoordinator: Published heartbeat #24
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #24 from leader leader
+leader-api  | peer-2 received heartbeat #24 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #25
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #25 from leader leader
+leader-api  | peer-1 received heartbeat #25 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | LeaderCoordinator: Published heartbeat #26
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #26 from leader leader
+leader-api  | peer-1 received heartbeat #26 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #27
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #27 from leader leader
+leader-api  | peer-1 received heartbeat #27 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | LeaderCoordinator: Published heartbeat #28
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #28 from leader leader
+leader-api  | peer-1 received heartbeat #28 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #29
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #29 from leader leader
+leader-api  | peer-1 received heartbeat #29 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | LeaderCoordinator: Published heartbeat #30
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #30 from leader leader
+leader-api  | peer-1 received heartbeat #30 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #31
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #31 from leader leader
+leader-api  | peer-1 received heartbeat #31 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | LeaderCoordinator: Published heartbeat #32
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #32 from leader leader
+leader-api  | peer-1 received heartbeat #32 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #33
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #33 from leader leader
+leader-api  | peer-2 received heartbeat #33 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | LeaderCoordinator: Published heartbeat #34
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #34 from leader leader
+leader-api  | peer-1 received heartbeat #34 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #35
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #35 from leader leader
+leader-api  | peer-1 received heartbeat #35 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | LeaderCoordinator: Published heartbeat #36
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #36 from leader leader
+leader-api  | peer-1 received heartbeat #36 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: Published heartbeat #37
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-1 received heartbeat #37 from leader leader
+leader-api  | peer-2 received heartbeat #37 from leader leader
+leader-api  | 
+leader-api  | ==> /app/leader.log <==
+leader-api  | LeaderCoordinator: After cleanup, peer count: 1, majority threshold: 1
+leader-api  | LeaderCoordinator: Published heartbeat #38
+leader-api  | 
+leader-api  | ==> /app/peers.log <==
+leader-api  | peer-2 received heartbeat #38 from leader leader
+leader-api  | peer-1 received heartbeat #38 from leader leader
