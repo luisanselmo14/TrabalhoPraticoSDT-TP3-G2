@@ -133,18 +133,72 @@ if ($peerDiscoveryLogs) {
     Write-Host "  [AVISO] Servico de descoberta nao encontrado nos logs" -ForegroundColor Yellow
 }
 
+# Função para identificar e parar apenas o processo líder dentro do container
+function Stop-LeaderProcess {
+    Write-Host "  Identificando processo líder no container..." -ForegroundColor Gray
+    
+    # Obter todos os processos Java
+    $allProcesses = docker exec leader-api sh -c "ps aux | grep java" 2>&1
+    
+    # Procurar pelo processo líder (que contém leader-api-1.0-SNAPSHOT.jar mas NÃO cluster-runner)
+    $leaderProcess = $allProcesses | Select-String -Pattern "leader-api-1.0-SNAPSHOT\.jar" | Where-Object { $_ -notmatch "cluster-runner" }
+    
+    if ($leaderProcess) {
+        # Extrair PID do processo (usar $leaderPid em vez de $pid que é variável reservada)
+        $processLine = $leaderProcess.ToString().Trim()
+        $parts = $processLine -split '\s+'
+        $leaderPid = $parts[1]
+        Write-Host "  Processo líder identificado (PID: $leaderPid)" -ForegroundColor Gray
+        Write-Host "  Parando apenas o processo líder..." -ForegroundColor Gray
+        docker exec leader-api kill -15 $leaderPid 2>&1 | Out-Null
+        Start-Sleep -Seconds 2
+        # Verificar se ainda está a correr e forçar kill se necessário
+        $stillRunning = docker exec leader-api sh -c "ps -p $leaderPid > /dev/null 2>&1 && echo 'running' || echo 'stopped'" 2>&1
+        if ($stillRunning -match "running") {
+            Write-Host "  Processo ainda ativo, forçando terminação..." -ForegroundColor Gray
+            docker exec leader-api kill -9 $leaderPid 2>&1 | Out-Null
+        }
+    } else {
+        # Fallback: tentar encontrar processo Java principal (primeiro que não seja cluster-runner)
+        $javaProcesses = $allProcesses | Select-String -Pattern "java" | Where-Object { $_ -notmatch "cluster-runner" -and $_ -notmatch "grep" }
+        if ($javaProcesses) {
+            $processLine = ($javaProcesses[0]).ToString().Trim()
+            $parts = $processLine -split '\s+'
+            $leaderPid = $parts[1]
+            Write-Host "  Processo Java identificado (PID: $leaderPid) - assumindo como líder" -ForegroundColor Gray
+            Write-Host "  Parando processo Java..." -ForegroundColor Gray
+            docker exec leader-api kill -15 $leaderPid 2>&1 | Out-Null
+            Start-Sleep -Seconds 2
+            docker exec leader-api kill -9 $leaderPid 2>&1 | Out-Null
+        } else {
+            Write-Host "  [AVISO] Não foi possível identificar processo líder, usando fallback (parar container)" -ForegroundColor Yellow
+            docker stop leader-api
+        }
+    }
+}
+
+# Função para reiniciar o processo líder dentro do container
+function Start-LeaderProcess {
+    Write-Host "  Reiniciando processo líder no container..." -ForegroundColor Gray
+    # O container deve ter um restart policy ou podemos reiniciar o container
+    docker start leader-api 2>&1 | Out-Null
+    Start-Sleep -Seconds 5
+    # Se o container já estava a correr, reiniciar o serviço dentro dele
+    docker exec leader-api sh -c "if command -v systemctl > /dev/null; then systemctl restart leader || true; fi" 2>&1 | Out-Null
+}
+
 # Teste 4: Testar deteccao de falha do lider
 Write-Host ""
 Write-Host "[TESTE 4] Testando deteccao de falha do lider..." -ForegroundColor Yellow
-Write-Host "  Parando o lider temporariamente..." -ForegroundColor Gray
-docker stop leader-api
+Write-Host "  Parando apenas o processo líder (mantendo container ativo)..." -ForegroundColor Gray
+Stop-LeaderProcess
 Start-Sleep -Seconds 20
 
-# Recarregar logs após parar o container para capturar logs mais recentes
-Write-Host "  Recarregando logs após parar container..." -ForegroundColor Gray
+# Recarregar logs após parar o processo para capturar logs mais recentes
+Write-Host "  Recarregando logs após parar processo líder..." -ForegroundColor Gray
 Initialize-DockerLogs -Force
 
-# Verificar logs ANTES de reiniciar (container parado ainda tem logs)
+# Verificar logs ANTES de reiniciar
 $failureLogs = Get-DockerLogs -Pattern "LEADER FAILURE|No heartbeat received|FAILURE DETECTED"
 if ($failureLogs) {
     Write-Host "  [OK] Falha do lider detectada pelos peers!" -ForegroundColor Green
@@ -159,8 +213,8 @@ if ($failureLogs) {
     }
 }
 
-Write-Host "  Reiniciando o lider..." -ForegroundColor Gray
-docker start leader-api
+Write-Host "  Reiniciando o processo líder..." -ForegroundColor Gray
+Start-LeaderProcess
 Start-Sleep -Seconds 10
 
 # Recarregar logs após reiniciar para capturar novos eventos
@@ -173,12 +227,12 @@ if ($recoveryLogs) {
 # Teste 4.1: Testar eleição RAFT quando lider falha por tempo prolongado
 Write-Host ""
 Write-Host "[TESTE 4.1] Testando eleição RAFT (prolongando falha do lider)..." -ForegroundColor Yellow
-Write-Host "  Parando o lider por tempo suficiente para triggerar eleição..." -ForegroundColor Gray
-docker stop leader-api
+Write-Host "  Parando apenas o processo líder por tempo suficiente para triggerar eleição..." -ForegroundColor Gray
+Stop-LeaderProcess
 Write-Host "  Aguardando 35 segundos para triggerar eleição (2x timeout = 30s)..." -ForegroundColor Gray
 Start-Sleep -Seconds 35  # Aguardar 2x timeout (30s) para triggerar eleição
 
-# Recarregar logs após parar container para capturar eventos de eleição
+# Recarregar logs após parar processo para capturar eventos de eleição
 Write-Host "  Recarregando logs após período de falha..." -ForegroundColor Gray
 Initialize-DockerLogs -Force
 
@@ -205,8 +259,8 @@ if ($electionLogs) {
     }
 }
 
-Write-Host "  Reiniciando o lider..." -ForegroundColor Gray
-docker start leader-api
+Write-Host "  Reiniciando o processo líder..." -ForegroundColor Gray
+Start-LeaderProcess
 Start-Sleep -Seconds 15
 
 # Recarregar logs após reiniciar
